@@ -476,18 +476,18 @@ static void cpufreq_interactive_timer(unsigned long data)
 	 * Do not scale below floor_freq unless we have been at or above the
 	 * floor frequency for the minimum sample time since last validated.
 	 */
-	if (kt_freq_control[1] == 0 && new_freq < pcpu->floor_freq) {
-		if (pcpu->policy->cur == pcpu->policy->max) {
-		        mod_min_sample_time = sampling_down_factor;
-		} else {
-		        mod_min_sample_time = min_sample_time;
+	if (sampling_down_factor && pcpu->policy->cur == pcpu->policy->max)
+		mod_min_sample_time = sampling_down_factor;
+	else
+		mod_min_sample_time = min_sample_time;
+
+	if (new_freq < pcpu->floor_freq) {
+		if (now - pcpu->floor_validate_time < mod_min_sample_time) {
+			trace_cpufreq_interactive_notyet(
+				data, cpu_load, pcpu->target_freq,
+				pcpu->policy->cur, new_freq);
+			goto rearm;
 		}
-                if (now - pcpu->floor_validate_time < mod_min_sample_time) {
-                        trace_cpufreq_interactive_notyet(
-                                data, cpu_load, pcpu->target_freq,
-                                pcpu->policy->cur, new_freq);
-                        goto rearm;
-                }
 	}
 
 	/*

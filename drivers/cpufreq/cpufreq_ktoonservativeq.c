@@ -44,6 +44,7 @@ static bool hotplug_flag_on = false;
 static unsigned int Lcpu_hotplug_block_cycles = 0;
 static bool hotplug_flag_off = false;
 static bool disable_hotplugging_chrg_override;
+static bool disable_hotplugging_media_override;
 
 void setExtraCores(unsigned int requested_freq);
 unsigned int kt_freq_control[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -65,6 +66,7 @@ static unsigned int min_sampling_rate;
 static unsigned int stored_sampling_rate = 45000;
 static unsigned int Lcpu_down_block_cycles = 0;
 static unsigned int Lcpu_up_block_cycles = 0;
+static unsigned int Lcpu_raise_block_cycles = 0;
 static bool boostpulse_relayf = false;
 static int boost_hold_cycles_cnt = 0;
 static bool screen_is_on = true;
@@ -80,11 +82,12 @@ extern bool apget_enable_auto_hotplug(void);
 static bool prev_apenable;
 static bool hotplugInProgress = false;
 
-//extern void kt_is_active_benabled_gpio(bool val);
 extern void kt_is_active_benabled_touchkey(bool val);
-//extern void kt_is_active_benabled_power(bool val);
 extern unsigned int get_cable_state(void);
 extern void ktoonservative_is_activechrg(bool val);
+extern int get_cable_stateW(void);
+extern void ktoonservative_is_activechrgW(bool val);
+extern void ktoonservative_is_active_media(bool val);
 
 #define LATENCY_MULTIPLIER			(1000)
 #define MIN_LATENCY_MULTIPLIER			(100)
@@ -139,6 +142,7 @@ static struct dbs_tuners {
 	unsigned int down_threshold_hotplug_3;
 	unsigned int cpu_down_block_cycles;
 	unsigned int cpu_hotplug_block_cycles;
+	unsigned int super_conservative;
 	unsigned int touch_boost_cpu;
 	unsigned int touch_boost_cpu_all_cores;
 	unsigned int touch_boost_2nd_core;
@@ -155,6 +159,7 @@ static struct dbs_tuners {
 	unsigned int boost_hold_cycles;
 	unsigned int disable_hotplugging;
 	unsigned int disable_hotplugging_chrg;
+	unsigned int disable_hotplugging_media;
 	unsigned int disable_hotplug_bt;
 	unsigned int no_extra_cores_screen_off;
 	unsigned int ignore_nice;
@@ -170,6 +175,7 @@ static struct dbs_tuners {
 	.down_threshold_hotplug_3 = 55,
 	.cpu_down_block_cycles = DEF_CPU_DOWN_BLOCK_CYCLES,
 	.cpu_hotplug_block_cycles = DEF_CPU_DOWN_BLOCK_CYCLES,
+	.super_conservative = 0,
 	.touch_boost_cpu = DEF_BOOST_CPU,
 	.touch_boost_cpu_all_cores = 0,
 	.touch_boost_2nd_core = 1,
@@ -186,6 +192,7 @@ static struct dbs_tuners {
 	.boost_hold_cycles = DEF_BOOST_HOLD_CYCLES,
 	.disable_hotplugging = DEF_DISABLE_HOTPLUGGING,
 	.disable_hotplugging_chrg = 0,
+	.disable_hotplugging_media = 0,
 	.disable_hotplug_bt = 0,
 	.no_extra_cores_screen_off = 1,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
@@ -292,9 +299,26 @@ void send_cable_state_kt(unsigned int state)
 			queue_work_on(0, dbs_wq, &hotplug_online_work);
 	}
 	else
-	{
 		disable_hotplugging_chrg_override = false;
+}
+
+bool set_music_playing_statekt(bool state)
+{
+	int cpu;
+	bool ret = false;
+	if (state && dbs_tuners_ins.disable_hotplugging_media)
+	{
+		disable_hotplugging_media_override = true;
+		for (cpu = 1; cpu < CPUS_AVAILABLE; cpu++)
+			hotplug_cpu_single_up[cpu] = 1;
+		if (!hotplugInProgress)
+			queue_work_on(0, dbs_wq, &hotplug_online_work);
+		ret = true;
 	}
+	else
+		disable_hotplugging_media_override = false;
+	
+	return ret;
 }
 
 /************************** sysfs interface ************************/
@@ -343,6 +367,7 @@ show_one(down_threshold_hotplug_2, down_threshold_hotplug_2);
 show_one(down_threshold_hotplug_3, down_threshold_hotplug_3);
 show_one(cpu_down_block_cycles, cpu_down_block_cycles);
 show_one(cpu_hotplug_block_cycles, cpu_hotplug_block_cycles);
+show_one(super_conservative, super_conservative);
 show_one(touch_boost_2nd_core, touch_boost_2nd_core);
 show_one(touch_boost_3rd_core, touch_boost_3rd_core);
 show_one(touch_boost_4th_core, touch_boost_4th_core);
@@ -356,6 +381,7 @@ show_one(touch_boost_gpu, touch_boost_gpu);
 show_one(boost_hold_cycles, boost_hold_cycles);
 show_one(disable_hotplugging, disable_hotplugging);
 show_one(disable_hotplugging_chrg, disable_hotplugging_chrg);
+show_one(disable_hotplugging_media, disable_hotplugging_media);
 show_one(disable_hotplug_bt, disable_hotplug_bt);
 show_one(no_extra_cores_screen_off, no_extra_cores_screen_off);
 show_one(ignore_nice_load, ignore_nice);
@@ -562,6 +588,20 @@ static ssize_t store_cpu_hotplug_block_cycles(struct kobject *a, struct attribut
 		return -EINVAL;
 
 	dbs_tuners_ins.cpu_hotplug_block_cycles = input;
+	return count;
+}
+
+static ssize_t store_super_conservative(struct kobject *a, struct attribute *b,
+				    const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (input != 0 && input != 1)
+		input = 0;
+
+	dbs_tuners_ins.super_conservative = input;
 	return count;
 }
 
@@ -805,7 +845,7 @@ static ssize_t store_disable_hotplugging(struct kobject *a, struct attribute *b,
 
 static ssize_t store_disable_hotplugging_chrg(struct kobject *a, struct attribute *b, const char *buf, size_t count)
 {
-	unsigned int input, c_state;
+	unsigned int input, c_state, c_stateW;
 	int ret, cpu;
 	ret = sscanf(buf, "%u", &input);
 
@@ -814,7 +854,26 @@ static ssize_t store_disable_hotplugging_chrg(struct kobject *a, struct attribut
 
 	dbs_tuners_ins.disable_hotplugging_chrg = input;
 	c_state = get_cable_state();
-	send_cable_state_kt(c_state);
+	c_stateW = get_cable_stateW();
+
+	if (c_state != 0 || c_stateW != 0)
+		send_cable_state_kt(1);
+	else
+		send_cable_state_kt(0);
+		
+	return count;
+}
+
+static ssize_t store_disable_hotplugging_media(struct kobject *a, struct attribute *b, const char *buf, size_t count)
+{
+	unsigned int input, c_state, c_stateW;
+	int ret, cpu;
+	ret = sscanf(buf, "%u", &input);
+
+	if (input != 0 && input != 1)
+		input = 0;
+
+	dbs_tuners_ins.disable_hotplugging_media = input;
 		
 	return count;
 }
@@ -969,6 +1028,7 @@ define_one_global_rw(down_threshold_hotplug_2);
 define_one_global_rw(down_threshold_hotplug_3);
 define_one_global_rw(cpu_down_block_cycles);
 define_one_global_rw(cpu_hotplug_block_cycles);
+define_one_global_rw(super_conservative);
 define_one_global_rw(touch_boost_cpu);
 define_one_global_rw(touch_boost_cpu_all_cores);
 define_one_global_rw(touch_boost_2nd_core);
@@ -985,6 +1045,7 @@ define_one_global_rw(sync_extra_cores);
 define_one_global_rw(boost_hold_cycles);
 define_one_global_rw(disable_hotplugging);
 define_one_global_rw(disable_hotplugging_chrg);
+define_one_global_rw(disable_hotplugging_media);
 define_one_global_rw(disable_hotplug_bt);
 define_one_global_rw(no_extra_cores_screen_off);
 define_one_global_rw(ignore_nice_load);
@@ -1005,6 +1066,7 @@ static struct attribute *dbs_attributes[] = {
 	&down_threshold_hotplug_3.attr,
 	&cpu_down_block_cycles.attr,
 	&cpu_hotplug_block_cycles.attr,
+	&super_conservative.attr,
 	&touch_boost_cpu.attr,
 	&touch_boost_cpu_all_cores.attr,
 	&touch_boost_2nd_core.attr,
@@ -1021,6 +1083,7 @@ static struct attribute *dbs_attributes[] = {
 	&boost_hold_cycles.attr,
 	&disable_hotplugging.attr,
 	&disable_hotplugging_chrg.attr,
+	&disable_hotplugging_media.attr,
 	&disable_hotplug_bt.attr,
 	&no_extra_cores_screen_off.attr,
 	&ignore_nice_load.attr,
@@ -1041,6 +1104,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	unsigned int max_load = 0;
 	unsigned int freq_target;
 	int cpu;
+	bool had_load_but_counting = false;
 	struct cpufreq_policy *policy;
 	unsigned int j;
 
@@ -1173,6 +1237,7 @@ boostcomplete:
 					Lcpu_hotplug_block_cycles = 0;
 				}
 				Lcpu_hotplug_block_cycles++;
+				had_load_but_counting = true;
 				break;
 			}
 			else if (max_load <= hotplug_cpu_enable_down[CPUS_AVAILABLE - cpu] && (cpu_online(CPUS_AVAILABLE - cpu)) && hotplug_cpu_lockout[CPUS_AVAILABLE - cpu] != 1)
@@ -1181,6 +1246,8 @@ boostcomplete:
 				hotplug_flag_off = true;
 				break;
 			}
+			//else if (dbs_tuners_ins.super_conservative)
+			//	Lcpu_hotplug_block_cycles = 0;
 		}
 		//pr_alert("LOAD CHECK: %d-%d-%d-%d-%d-%d-%d\n", max_load, hotplug_cpu_single_up[1], hotplug_cpu_single_up[2], hotplug_cpu_single_up[3], hotplug_cpu_enable_up[1], hotplug_cpu_enable_up[2], hotplug_cpu_enable_up[3]);
 	
@@ -1199,33 +1266,48 @@ boostcomplete:
 				Lcpu_up_block_cycles++;
 			}
 		}
+		else if (dbs_tuners_ins.super_conservative)
+		{
+			Lcpu_up_block_cycles = 0;
+			if (!had_load_but_counting)
+				Lcpu_hotplug_block_cycles = 0;
+		}
 	}
 
 	/* Check for frequency increase */
 	if (max_load > dbs_tuners_ins.up_threshold) {
-		this_dbs_info->down_skip = 0;
+		if (Lcpu_raise_block_cycles > dbs_tuners_ins.cpu_down_block_cycles || dbs_tuners_ins.super_conservative == 0)
+		{
+			this_dbs_info->down_skip = 0;
 
-		/* if we are already at full speed then break out early */
-		if (this_dbs_info->requested_freq == policy->max)
-			return;
+			/* if we are already at full speed then break out early */
+			if (this_dbs_info->requested_freq == policy->max)
+				return;
 
-		freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
+			freq_target = (dbs_tuners_ins.freq_step * policy->max) / 100;
 
-		/* max freq cannot be less than 100. But who knows.... */
-		if (unlikely(freq_target == 0))
-			freq_target = 5;
+			/* max freq cannot be less than 100. But who knows.... */
+			if (unlikely(freq_target == 0))
+				freq_target = 5;
 
-		this_dbs_info->requested_freq += freq_target;
-		if (this_dbs_info->requested_freq > policy->max)
-			this_dbs_info->requested_freq = policy->max;
+			this_dbs_info->requested_freq += freq_target;
+			if (this_dbs_info->requested_freq > policy->max)
+				this_dbs_info->requested_freq = policy->max;
 
-		__cpufreq_driver_target(policy, this_dbs_info->requested_freq, CPUFREQ_RELATION_H);
-		if (dbs_tuners_ins.sync_extra_cores && policy->cpu == 0)
-			setExtraCores(this_dbs_info->requested_freq);
+			__cpufreq_driver_target(policy, this_dbs_info->requested_freq, CPUFREQ_RELATION_H);
+			if (dbs_tuners_ins.sync_extra_cores && policy->cpu == 0)
+				setExtraCores(this_dbs_info->requested_freq);
+			if (dbs_tuners_ins.super_conservative)
+				Lcpu_raise_block_cycles = 0;
+		}
+		if (dbs_tuners_ins.super_conservative)
+			Lcpu_raise_block_cycles++;
 		return;
 	}
+	else if (dbs_tuners_ins.super_conservative)
+		Lcpu_raise_block_cycles = 0;
 	
-	if (policy->cpu == 0 && hotplug_flag_off && !dbs_tuners_ins.disable_hotplugging && !disable_hotplugging_chrg_override && disable_hotplug_bt_active == false) {
+	if (policy->cpu == 0 && hotplug_flag_off && !dbs_tuners_ins.disable_hotplugging && !disable_hotplugging_chrg_override && !disable_hotplugging_media_override && disable_hotplug_bt_active == false) {
 		if (num_online_cpus() > 1)
 		{
 			if (Lcpu_down_block_cycles > dbs_tuners_ins.cpu_down_block_cycles)
@@ -1441,6 +1523,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		ktoonservative_is_activepk(true);
 		ktoonservative_is_activehk(true);
 		ktoonservative_is_activechrg(true);
+		ktoonservative_is_activechrgW(true);
+		ktoonservative_is_active_media(true);
 		if (dbs_tuners_ins.boost_2nd_core_on_button == 1 || dbs_tuners_ins.boost_3rd_core_on_button == 1 || dbs_tuners_ins.boost_4th_core_on_button == 1)
     		{
       			//kt_is_active_benabled_gpio(true);
@@ -1516,6 +1600,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		ktoonservative_is_activepk(false);
 		ktoonservative_is_activehk(false);
 		ktoonservative_is_activechrg(false);
+		ktoonservative_is_activechrgW(false);
+		ktoonservative_is_active_media(false);
     		//kt_is_active_benabled_gpio(false);
     		kt_is_active_benabled_touchkey(false);
     		//kt_is_active_benabled_power(false);

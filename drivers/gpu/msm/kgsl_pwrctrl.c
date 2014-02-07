@@ -48,6 +48,7 @@ struct kgsl_device *Gbldevice;
 unsigned long orig_max;
 unsigned long internal_max = 450000000;
 int boost_level = -1;
+extern bool are_we_tthrottling(void);
 
 struct clk_pair {
 	const char *name;
@@ -139,8 +140,8 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	/* Adjust the power level to the current constraints */
 	new_level = _adjust_pwrlevel(pwr, new_level);
 
-	//Assign new_level to boost level if it is not -1
-	if (boost_level != -1)
+	//Assign new_level to boost level if it is not -1 and less than new level
+	if (boost_level != -1 && boost_level < new_level)
 		new_level = boost_level;
 
 	if (new_level == pwr->active_pwrlevel)
@@ -215,7 +216,7 @@ static int kgsl_pwrctrl_thermal_pwrlevel_store(struct device *dev,
 	pwr = &device->pwrctrl;
 
 	ret = sscanf(buf, "%d", &level);
-	if (ret != 1)
+	if (ret != 1 || (!are_we_tthrottling() && level != 0))
 		return count;
 
 	if (level < 0)

@@ -664,17 +664,20 @@ static ssize_t store_scaling_booted(struct cpufreq_policy *policy, const char *b
 			vfreq_lock = 0;
 			vfreq_lock_tempOFF = true;
 		}
-		isBooted = 1;
-		GLOBALKT_MIN_FREQ_LIMIT = 81000;
-		GLOBALKT_MAX_FREQ_LIMIT = 2322000;
-		cpufreq_get_policy(&new_policy, policy->cpu);
-		new_policy.min = 378000;
-		new_policy.max = 1890000;
-		new_policy.cpuinfo.min_freq = GLOBALKT_MIN_FREQ_LIMIT;
-		new_policy.cpuinfo.max_freq = GLOBALKT_MAX_FREQ_LIMIT;
-		new_policy.user_policy.min = 378000;
-		new_policy.user_policy.max = 1890000;
-		ret = __cpufreq_set_policy(policy, &new_policy);
+    if (isBooted == 0)
+    {
+	    isBooted = 1;
+	    GLOBALKT_MIN_FREQ_LIMIT = 81000;
+	    GLOBALKT_MAX_FREQ_LIMIT = 2322000;
+	    cpufreq_get_policy(&new_policy, policy->cpu);
+	    new_policy.min = 378000;
+	    new_policy.max = 1890000;
+	    new_policy.cpuinfo.min_freq = GLOBALKT_MIN_FREQ_LIMIT;
+	    new_policy.cpuinfo.max_freq = GLOBALKT_MAX_FREQ_LIMIT;
+	    new_policy.user_policy.min = 378000;
+	    new_policy.user_policy.max = 1890000;
+	    ret = __cpufreq_set_policy(policy, &new_policy);
+    }
 	}
 	else
 		isBooted = 0;

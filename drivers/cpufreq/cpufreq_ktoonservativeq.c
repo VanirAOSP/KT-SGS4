@@ -73,7 +73,6 @@ extern void ktoonservative_is_active(bool val);
 extern void ktoonservative_is_activebd(bool val);
 extern void ktoonservative_is_activepk(bool val);
 extern void ktoonservative_is_activehk(bool val);
-extern void boost_the_gpu(unsigned int freq, bool getfreq);
 
 extern void apenable_auto_hotplug(bool state);
 extern bool apget_enable_auto_hotplug(void);
@@ -770,9 +769,6 @@ static ssize_t store_touch_boost_gpu(struct kobject *a, struct attribute *b,
 
 	if (input != 128 && input != 200 && input != 320 && input != 450 && input != 504 && input != 545 && input != 600 && input != 627)
 		input = 0;
-	
-	if (input == 0)
-		boost_the_gpu(dbs_tuners_ins.touch_boost_gpu, false);
 		
 	dbs_tuners_ins.touch_boost_gpu = input;
 	return count;
@@ -1065,7 +1061,6 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 				for (cpu = 0; cpu < CPUS_AVAILABLE; cpu++)
 					kt_freq_control[cpu] = 0;
 			}
-			boost_the_gpu(dbs_tuners_ins.touch_boost_gpu, false);
 			goto boostcomplete;
 		}
 		boost_hold_cycles_cnt++;
@@ -1340,7 +1335,6 @@ void screen_is_on_relay_kt(bool state)
 	}
 	else
 	{
-		boost_the_gpu(dbs_tuners_ins.touch_boost_gpu, false);
 		stored_sampling_rate = dbs_tuners_ins.sampling_rate;
 		dbs_tuners_ins.sampling_rate = dbs_tuners_ins.sampling_rate_screen_off;
 		//pr_alert("SCREEN_IS_ON2: %d-%d\n", dbs_tuners_ins.sampling_rate, stored_sampling_rate);
@@ -1356,7 +1350,6 @@ void boostpulse_relay_kt(void)
 
 		if (dbs_tuners_ins.touch_boost_gpu > 0 && screen_is_on)
 		{
-			boost_the_gpu(dbs_tuners_ins.touch_boost_gpu, true);
 			boostpulse_relayf = true;
 			boost_hold_cycles_cnt = 0;
 		}
@@ -1548,9 +1541,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
     		//kt_is_active_benabled_power(false);
 		
 		apenable_auto_hotplug(prev_apenable);
-		
-		boost_the_gpu(dbs_tuners_ins.touch_boost_gpu, false);
-		
+	
 		dbs_timer_exit(this_dbs_info);
 
 		mutex_lock(&dbs_mutex);

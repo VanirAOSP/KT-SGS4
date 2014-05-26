@@ -10,6 +10,7 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/cpufreq_kt.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>

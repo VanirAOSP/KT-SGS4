@@ -24,6 +24,7 @@
  * 2009-Aug-10  Motorola         Changed "add_timer" to "mod_timer" to solve
  *                               race when flurry of queued work comes in.
 */
+#include <linux/cpufreq_kt.h>
 
 #include <linux/module.h>       /* kernel module definitions */
 #include <linux/errno.h>

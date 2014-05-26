@@ -22,6 +22,7 @@
 
 #define DEBUG
 
+#include <linux/cpufreq_kt.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/hrtimer.h>

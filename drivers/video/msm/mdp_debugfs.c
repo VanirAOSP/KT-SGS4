@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -160,10 +160,7 @@ static ssize_t mdp_reg_write(
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	printk(KERN_INFO "%s: addr=%x data=%x\n", __func__, off, data);
-	{
-		void xlog_dump(void);
-		xlog_dump();
-	}
+
 	return count;
 }
 
@@ -623,11 +620,8 @@ static void mddi_reg_write(int ndx, uint32 off, uint32 data)
 	else
 		base = (char *)msm_pmdh_base;
 
-	if (base == NULL) {
-		printk(KERN_INFO "%s: base offset is not set properly. \
-			Please check if MDDI enables correctly\n", __func__);
+	if (base == NULL)
 		return;
-	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	writel(data, base + off);
@@ -652,11 +646,8 @@ static int mddi_reg_read(int ndx)
 	else
 		base = msm_pmdh_base;
 
-	if (base == NULL) {
-		printk(KERN_INFO "%s: base offset is not set properly. \
-			Please check if MDDI enables correctly\n", __func__);
+	if (base == NULL)
 		return -EFAULT;
-	}
 
 	reg = mddi_regs_list;
 	bp = debug_buf;

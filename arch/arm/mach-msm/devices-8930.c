@@ -63,17 +63,24 @@ static struct resource msm8930_resources_pccntr[] = {
 	},
 };
 
-static struct msm_pm_init_data_type msm_pm_data = {
-	.retention_calls_tz = true,
-};
-
-struct platform_device msm8930_pm_8x60 = {
-	.name		= "pm-8x60",
+struct platform_device msm8930_pc_cntr = {
+	.name		= "pc-cntr",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(msm8930_resources_pccntr),
 	.resource	= msm8930_resources_pccntr,
+};
+
+static struct msm_pm_sleep_status_data msm_pm_slp_sts_data = {
+	.base_addr = MSM_ACC0_BASE + 0x08,
+	.cpu_offset = MSM_ACC1_BASE - MSM_ACC0_BASE,
+	.mask = 1UL << 13,
+};
+
+struct platform_device msm8930_cpu_slp_status = {
+	.name		= "cpu_slp_status",
+	.id		= -1,
 	.dev = {
-		.platform_data = &msm_pm_data,
+		.platform_data = &msm_pm_slp_sts_data,
 	},
 };
 
@@ -550,14 +557,14 @@ struct platform_device msm8930_rpm_device = {
 };
 
 static struct msm_rpm_log_platform_data msm_rpm_log_pdata = {
-	.phys_addr_base = 0x10B6A0,
+	.phys_addr_base = 0x0010C000,
 	.reg_offsets = {
 		[MSM_RPM_LOG_PAGE_INDICES] = 0x00000080,
 		[MSM_RPM_LOG_PAGE_BUFFER]  = 0x000000A0,
 	},
 	.phys_size = SZ_8K,
-	.log_len = 8192,		  /* log's buffer length in bytes */
-	.log_len_mask = (8192 >> 2) - 1,  /* length mask in units of u32 */
+	.log_len = 4096,		  /* log's buffer length in bytes */
+	.log_len_mask = (4096 >> 2) - 1,  /* length mask in units of u32 */
 };
 
 struct platform_device msm8930_rpm_log_device = {
@@ -962,20 +969,17 @@ static struct msm_bus_vectors vidc_vdec_720p_vectors[] = {
 		.ib  = 7000000,
 	},
 };
-/*This value is modified because internally we use
- * lower value. But OEM has increased it. This is correct value
- * for oem*/
 static struct msm_bus_vectors vidc_venc_1080p_vectors[] = {
 	{
 		.src = MSM_BUS_MASTER_HD_CODEC_PORT0,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab  = 400000000,
+		.ab  = 372244480,
 		.ib  = 2560000000U,
 	},
 	{
 		.src = MSM_BUS_MASTER_HD_CODEC_PORT1,
 		.dst = MSM_BUS_SLAVE_EBI_CH0,
-		.ab  = 550000000,
+		.ab  = 501219328,
 		.ib  = 2560000000U,
 	},
 	{

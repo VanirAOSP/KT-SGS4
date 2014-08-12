@@ -62,8 +62,8 @@
 
 #define MAX_LUT_SIZE	256
 
-#define PAYLOAD1 mdni_tune_cmd[2]
-#define PAYLOAD2 mdni_tune_cmd[1]
+#define PAYLOAD1 mdni_tune_cmd[3]
+#define PAYLOAD2 mdni_tune_cmd[2]
 
 #define INPUT_PAYLOAD1(x) PAYLOAD1.payload = x
 #define INPUT_PAYLOAD2(x) PAYLOAD2.payload = x
@@ -71,7 +71,7 @@
 
 int play_speed_1_5;
 #if defined(CONFIG_FB_MSM_MIPI_RENESAS_TFT_VIDEO_FULL_HD_PT_PANEL)
-static int cabc = 0;
+static int cabc = -1;
 extern int mipi_samsung_cabc_onoff ( int enable );
 #endif
 
@@ -90,8 +90,9 @@ struct mdnie_lite_tun_type mdnie_tun_state = {
 const char background_name[MAX_BACKGROUND_MODE][16] = {
 	"STANDARD",
 	"DYNAMIC",
-	"MOVIE",
 	"NATURAL",
+	"MOVIE",
+	"AUTO",
 };
 
 const char scenario_name[MAX_mDNIe_MODE][16] = {
@@ -100,11 +101,11 @@ const char scenario_name[MAX_mDNIe_MODE][16] = {
 	"VIDEO_WARM_MODE",
 	"VIDEO_COLD_MODE",
 	"CAMERA_MODE",
-	"NAVI",
+	"NAVI_MODE",
 	"GALLERY_MODE",
 	"VT_MODE",
-	"BROWSER",
-	"eBOOK",
+	"BROWSER_MODE",
+	"eBOOK_MODE",
 #if defined(CONFIG_TDMB)
 	"DMB_MODE",
 	"DMB_WARM_MODE",
@@ -112,48 +113,30 @@ const char scenario_name[MAX_mDNIe_MODE][16] = {
 #endif
 };
 
-static char tune_data1[MDNIE_TUNE_FIRST_SIZE] = {0,};
-static char tune_data2[MDNIE_TUNE_SECOND_SIZE] = {0,};
-
-#if defined(CONFIG_DISPLAY_DISABLE_TEST_KEY)
-static char level1_key_enable[] = {
-	0xF0,
-	0x5A, 0x5A,
-};
-
-static char level1_key_disable[] = {
-	0xF0,
-	0xA5, 0xA5,
-};
-
-static struct dsi_cmd_desc mdni_tune_cmd[] = {
-	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
-		sizeof(level1_key_enable), level1_key_enable},
-
-	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
-		sizeof(tune_data1), tune_data1},
-	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
-		sizeof(tune_data2), tune_data2},
-
-	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
-		sizeof(level1_key_disable), level1_key_disable},
-};
-#else
 static char level1_key[] = {
 	0xF0,
 	0x5A, 0x5A,
 };
 
+static char level2_key[] = {
+	0xF1,
+	0x5A, 0x5A,
+};
+
+static char tune_data1[MDNIE_TUNE_FIRST_SIZE] = {0,};
+static char tune_data2[MDNIE_TUNE_SECOND_SIZE] = {0,};
+
 static struct dsi_cmd_desc mdni_tune_cmd[] = {
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
 		sizeof(level1_key), level1_key},
+	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
+		sizeof(level2_key), level2_key},
 
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
 		sizeof(tune_data1), tune_data1},
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
 		sizeof(tune_data2), tune_data2},
 };
-#endif
 
 void print_tun_data(void)
 {
@@ -1012,6 +995,11 @@ static ssize_t cabc_store(struct device *dev,
 	DPRINT ( "cabc_store, input value = %d\n", value);
 
 	return size;
+}
+
+int is_cabc_on ( void )
+{
+	return cabc;
 }
 
 static DEVICE_ATTR(cabc, 0664,

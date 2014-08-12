@@ -1,7 +1,6 @@
 config ARM
 	bool
 	default y
-	select HAVE_AOUT
 	select HAVE_DMA_API_DEBUG
 	select HAVE_IDE if PCI || ISA || PCMCIA
 	select HAVE_DMA_CONTIGUOUS if (CPU_V6 || CPU_V6K || CPU_V7)
@@ -213,14 +212,16 @@ config NEED_RET_TO_USER
 config ARCH_MTD_XIP
 	bool
 
+config ARCH_WANT_KMAP_ATOMIC_FLUSH
+	bool
+
 config VECTORS_BASE
 	hex
 	default 0xffff0000 if MMU || CPU_HIGH_VECTOR
 	default DRAM_BASE if REMAP_VECTORS_TO_RAM
 	default 0x00000000
 	help
-	  The base address of exception vectors.  This must be two pages
-	  in size.
+	  The base address of exception vectors.
 
 config ARM_PATCH_PHYS_VIRT
 	bool "Patch physical to virtual translations at runtime" if EMBEDDED
@@ -264,14 +265,6 @@ config PHYS_OFFSET
 config GENERIC_BUG
 	def_bool y
 	depends on BUG
-
-config ARCH_RANDOM
-	bool "SOC specific random number generation"
-	help
-	 Allow the kernel to use an architecture specific implementation for
-	 random number generation
-
-	 If unsure, say N
 
 config GENERIC_TIME_VSYSCALL
 	bool "Enable gettimeofday updates"
@@ -607,7 +600,7 @@ config ARCH_IXP4XX
 	select ARCH_HAS_DMA_SET_COHERENT_MASK
 	select CLKSRC_MMIO
 	select CPU_XSCALE
-	select GENERIC_GPIO
+	select ARCH_REQUIRE_GPIOLIB
 	select GENERIC_CLOCKEVENTS
 	select MIGHT_HAVE_PCI
 	select NEED_MACH_IO_H
@@ -630,6 +623,7 @@ config ARCH_KIRKWOOD
 	bool "Marvell Kirkwood"
 	select CPU_FEROCEON
 	select PCI
+	select PCI_QUIRKS
 	select ARCH_REQUIRE_GPIOLIB
 	select GENERIC_CLOCKEVENTS
 	select NEED_MACH_IO_H
@@ -1560,6 +1554,42 @@ source "drivers/pci/Kconfig"
 
 source "drivers/pcmcia/Kconfig"
 
+config ARM_ERRATA_764369
+	bool "ARM errata: Data cache line maintenance operation by MVA may not succeed"
+	depends on CPU_V7 && SMP
+	help
+	  This option enables the workaround for erratum 764369
+	  affecting Cortex-A9 MPCore with two or more processors (all
+	  current revisions). Under certain timing circumstances, a data
+	  cache line maintenance operation by MVA targeting an Inner
+	  Shareable memory region may fail to proceed up to either the
+	  Point of Coherency or to the Point of Unification of the
+	  system. This workaround adds a DSB instruction before the
+	  relevant cache maintenance functions and sets a specific bit
+	  in the diagnostic control register of the SCU.
+
+config PL310_ERRATA_769419
+	bool "PL310 errata: no automatic Store Buffer drain"
+	depends on CACHE_L2X0
+	help
+	  On revisions of the PL310 prior to r3p2, the Store Buffer does
+	  not automatically drain. This can cause normal, non-cacheable
+	  writes to be retained when the memory system is idle, leading
+	  to suboptimal I/O performance for drivers using coherent DMA.
+	  This option adds a write barrier to the cpu_idle loop so that,
+	  on systems with an outer cache, the store buffer is drained
+	  explicitly.
+
+config ARM_ERRATA_775420
+       bool "ARM errata: A data cache maintenance operation which aborts, might lead to deadlock"
+       depends on CPU_V7
+       help
+	 This option enables the workaround for the 775420 Cortex-A9 (r2p2,
+	 r2p6,r2p8,r2p10,r3p0) erratum. In case a date cache maintenance
+	 operation aborts with MMU exception, it might cause the processor
+	 to deadlock. This workaround puts DSB before executing ISB if
+	 an abort may occur on cache maintenance.
+
 endmenu
 
 menu "Kernel Features"
@@ -1693,6 +1723,10 @@ config HOTPLUG_CPU
 	  Say Y here to experiment with turning CPUs off and on.  CPUs
 	  can be controlled through /sys/devices/system/cpu.
 
+config ARM_AUTO_HOTPLUG
+	bool "Auto hotplugging based on scheduler runqueue load for ARM SoCs"
+	default y
+
 config LOCAL_TIMERS
 	bool "Use local timer interrupts"
 	depends on SMP
@@ -1791,7 +1825,7 @@ config AEABI
 config OABI_COMPAT
 	bool "Allow old ABI binaries to run with this kernel (EXPERIMENTAL)"
 	depends on AEABI && EXPERIMENTAL && !THUMB2_KERNEL
-	default y if !SMP
+	default n
 	help
 	  This option preserves the old syscall interface along with the
 	  new (ARM EABI) one. It also provides a compatibility layer to
@@ -1867,36 +1901,8 @@ config ARCH_MEMORY_REMOVE
 config ENABLE_DMM
 	def_bool n
 
-choice
-	prompt "Virtual Memory Reclaim"
-	default NO_VM_RECLAIM
-	help
-	  Select the method of reclaiming virtual memory
-
 config DONT_MAP_HOLE_AFTER_MEMBANK0
-	bool "Map around the largest hole"
-	help
-	  Do not map the memory belonging to the largest hole
-	  into the virtual space. This results in more lowmem.
-	  If multiple holes are present, only the largest hole
-	  in the first 256MB of memory is not mapped.
-
-config ENABLE_VMALLOC_SAVING
-	bool "Reclaim memory for each subsystem"
-	help
-	  Enable this config to reclaim the virtual space belonging
-	  to any subsystem which is expected to have a lifetime of
-	  the entire system. This feature allows lowmem to be non-
-	  contiguous.
-
-config NO_VM_RECLAIM
-	bool "Do not reclaim memory"
-	help
-	  Do not reclaim any memory. This might result in less lowmem
-	  and wasting virtual memory space which could otherwise be
-	  reclaimed by using any of the other two config options.
-
-endchoice
+	def_bool n
 
 config HOLES_IN_ZONE
 	def_bool n
@@ -2054,9 +2060,9 @@ config CP_ACCESS
 
 	  If unsure, say N.
 
-endmenu
-
 source "arch/arm/mvp/Kconfig"
+
+endmenu
 
 menu "Boot options"
 
@@ -2314,6 +2320,7 @@ source "drivers/cpufreq/Kconfig"
 config CPU_FREQ_IMX
 	tristate "CPUfreq driver for i.MX CPUs"
 	depends on ARCH_MXC && CPU_FREQ
+	select CPU_FREQ_TABLE
 	help
 	  This enables the CPUfreq driver for i.MX CPUs.
 

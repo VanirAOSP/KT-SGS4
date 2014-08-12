@@ -119,16 +119,16 @@ extern void __raw_readsl(const void __iomem *addr, void *data, int longlen);
  */
 extern void __iomem *__arm_ioremap_pfn_caller(unsigned long, unsigned long,
 	size_t, unsigned int, void *);
-extern void __iomem *__arm_ioremap_caller(unsigned long, size_t, unsigned int,
+extern void __iomem *__arm_ioremap_caller(phys_addr_t, size_t, unsigned int,
 	void *);
 
 extern void __iomem *__arm_ioremap_pfn(unsigned long, unsigned long, size_t, unsigned int);
-extern void __iomem *__arm_ioremap(unsigned long, size_t, unsigned int);
-extern void __iomem *__arm_ioremap_exec(unsigned long, size_t, bool cached);
+extern void __iomem *__arm_ioremap(phys_addr_t, size_t, unsigned int);
+extern void __iomem *__arm_ioremap_exec(phys_addr_t, size_t, bool cached);
 extern void __iounmap(volatile void __iomem *addr);
 extern void __arm_iounmap(volatile void __iomem *addr);
 
-extern void __iomem * (*arch_ioremap_caller)(unsigned long, size_t,
+extern void __iomem * (*arch_ioremap_caller)(phys_addr_t, size_t,
 	unsigned int, void *);
 extern void (*arch_iounmap)(volatile void __iomem *);
 
@@ -278,7 +278,6 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
 					__raw_readl_no_log(c)); __r; })
 #define readll_relaxed_no_log(c) ({ u64 __r = le64_to_cpu((__force __le64) \
 					__raw_readll_no_log(c)); __r; })
-
 
 #define writeb_relaxed(v,c)	((void)__raw_writeb(v,c))
 #define writew_relaxed(v,c)	((void)__raw_writew((__force u16) \

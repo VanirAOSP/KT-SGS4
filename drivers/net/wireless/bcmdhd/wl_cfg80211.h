@@ -2,7 +2,7 @@
  * Linux cfg80211 driver
  *
  * Copyright (C) 1999-2013, Broadcom Corporation
- *
+ * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_cfg80211.h 431563 2013-10-24 01:50:16Z $
+ * $Id: wl_cfg80211.h 429125 2013-10-11 10:43:53Z $
  */
 
 #ifndef _wl_cfg80211_h_
@@ -636,11 +636,10 @@ struct wl_priv {
 	struct delayed_work pm_enable_work;
 	vndr_ie_setbuf_t *ibss_vsie;	/* keep the VSIE for IBSS */
 	int ibss_vsie_len;
-#ifdef SUPPORT_AIBSS
+#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
 	u32 aibss_txfail_pid;
 	u32 aibss_txfail_seq;
-#endif /* SUPPORT_AIBSS */
-
+#endif
 #ifdef WLFBT
 	uint8 fbt_key[FBT_KEYLEN];
 #endif
@@ -1010,9 +1009,9 @@ extern s32 wl_cfg80211_ibss_vsie_delete(struct net_device *dev);
 /* Action frame specific functions */
 extern u8 wl_get_action_category(void *frame, u32 frame_len);
 extern int wl_get_public_action(void *frame, u32 frame_len, u8 *ret_action);
-#ifdef SUPPORT_AIBSS
+#if defined(CUSTOMER_HW4) && defined(SUPPORT_AIBSS)
 extern void wl_cfg80211_set_txfail_pid(int pid);
-#endif /* SUPPORT_AIBSS */
+#endif /* CUSTOMER_HW4 && SUPPORT_AIBSS */
 #ifdef WLFBT
 extern void wl_get_fbt_key(uint8 *key);
 #endif

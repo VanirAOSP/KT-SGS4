@@ -10,11 +10,13 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/cpufreq_kt.h>
 #include <linux/mfd/max77693.h>
 #include <linux/mfd/max77693-private.h>
 #ifdef CONFIG_USB_HOST_NOTIFY
 #include "../../arch/arm/mach-msm/board-8064.h"
 #endif
+#include <linux/fastchg.h>
 
 #define ENABLE 1
 #define DISABLE 0
@@ -26,6 +28,9 @@
 #define MINIMUM_INPUT_CURRENT	300
 #define SIOP_INPUT_LIMIT_CURRENT 1200
 #define SIOP_CHARGING_LIMIT_CURRENT 1000
+
+extern void send_cable_state(unsigned int state);
+int gwc_w_state = 0;
 
 struct max77693_charger_data {
 	struct max77693_dev	*max77693;
@@ -466,7 +471,7 @@ static void max77693_recovery_work(struct work_struct *work)
 		(chgin_dtls == 0x3) && (chg_dtls != 0x8) && (byp_dtls == 0x0))) {
 		pr_info("%s: try to recovery, cnt(%d)\n", __func__,
 				(chg_data->soft_reg_recovery_cnt + 1));
-		if (chg_data->siop_level < 100 &&
+		if (screen_on_current_limit && chg_data->siop_level < 100 &&
 				chg_data->cable_type == POWER_SUPPLY_TYPE_MAINS) {
 			pr_info("%s : LCD on status and revocer current\n", __func__);
 			max77693_set_input_current(chg_data,
@@ -797,7 +802,7 @@ static int sec_chg_set_property(struct power_supply *psy,
 				set_charging_current_max =
 					charger->charging_current_max;
 
-			if (charger->siop_level < 100 &&
+			if (screen_on_current_limit && charger->siop_level < 100 &&
 					val->intval == POWER_SUPPLY_TYPE_MAINS) {
 				set_charging_current_max = SIOP_INPUT_LIMIT_CURRENT;
 				if (set_charging_current > SIOP_CHARGING_LIMIT_CURRENT)
@@ -847,14 +852,14 @@ static int sec_chg_set_property(struct power_supply *psy,
 
 			/* do forced set charging current */
 			if (charger->cable_type == POWER_SUPPLY_TYPE_MAINS) {
-				if (charger->siop_level < 100 )
+				if (screen_on_current_limit && charger->siop_level < 100 )
 					set_charging_current_max =
 						SIOP_INPUT_LIMIT_CURRENT;
 				else
 					set_charging_current_max =
 						charger->charging_current_max;
 
-				if (charger->siop_level < 100 && current_now > SIOP_CHARGING_LIMIT_CURRENT)
+				if (screen_on_current_limit && charger->siop_level < 100 && current_now > SIOP_CHARGING_LIMIT_CURRENT)
 					current_now = SIOP_CHARGING_LIMIT_CURRENT;
 				max77693_set_input_current(charger,
 						set_charging_current_max);
@@ -1081,6 +1086,9 @@ static void wpc_detect_work(struct work_struct *work)
 				POWER_SUPPLY_PROP_ONLINE, value);
 		pr_info("%s: wpc activated, set V_INT as PN\n",
 				__func__);
+		send_cable_state(10);
+		if (ktoonservative_is_active)
+			send_cable_state_kt(10);
 	} else if (wc_w_state == 0) {
 		if (!chg_data->is_charging)
 			max77693_set_charger_state(chg_data, true);
@@ -1103,12 +1111,21 @@ static void wpc_detect_work(struct work_struct *work)
 					POWER_SUPPLY_PROP_ONLINE, value);
 			pr_info("%s: wpc deactivated, set V_INT as PD\n",
 					__func__);
+			send_cable_state(0);
+			if (ktoonservative_is_active)
+				send_cable_state_kt(0);
 		}
 	}
 	pr_info("%s: w(%d to %d)\n", __func__,
 			chg_data->wc_w_state, wc_w_state);
 
 	chg_data->wc_w_state = wc_w_state;
+	gwc_w_state = wc_w_state;
+}
+
+int get_cable_stateW(void)
+{
+	return gwc_w_state;
 }
 
 static irqreturn_t wpc_charger_irq(int irq, void *data)
